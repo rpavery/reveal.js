@@ -54,6 +54,18 @@
 			// Display the page number of the current slide
 			slideNumber: false,
 
+			// Use audio narration
+			narration: false,
+
+			// Display narration audio controls
+			narrationControls: true,
+
+			// Automatically proceed to next slide at end of audio file
+			narrationAutoSlide: true,
+
+			// Available audio formats, e.g. ['ogg','mp4','mp3']
+			narrationFormats: [],
+
 			// Push each slide change to the browser history
 			history: false,
 
@@ -317,6 +329,11 @@
 
 		isMobileDevice = /(iphone|ipod|ipad|android)/gi.test( navigator.userAgent );
 
+		var a = document.createElement('audio');
+		features.ogg = !!(a.canPlayType && a.canPlayType('audio/ogg; codecs="vorbis"').replace(/no/, ''));
+		features.mp4 = !!(a.canPlayType && a.canPlayType('audio/mp4; codecs="mp4a.40.2"').replace(/no/, ''));
+		features.mp3 = !!(a.canPlayType && a.canPlayType('audio/mpeg;').replace(/no/, ''));
+
 	}
 
     /**
@@ -467,6 +484,9 @@
 
 		// Slide number
 		dom.slideNumber = createSingletonNode( dom.wrapper, 'div', 'slide-number', '' );
+
+		// Narration audio controls
+		dom.narrationControls = createSingletonNode( dom.wrapper, 'audio', 'narration-controls', '' );
 
 		// Element containing notes that are visible to the audience
 		dom.speakerNotes = createSingletonNode( dom.wrapper, 'div', 'speaker-notes', null );
@@ -883,6 +903,19 @@
 		dom.progress.style.display = config.progress ? 'block' : 'none';
 		dom.slideNumber.style.display = config.slideNumber ? 'block' : 'none';
 
+		if( config.narrationControls ) dom.narrationControls.setAttribute( 'controls', 'controls' );
+
+		// Select narration format based on preferences and capabilities
+		if( config.narration ) {
+			var i = 0;
+			while( !config.narrationExt && i < config.narrationFormats.length ) {
+				if( features[config.narrationFormats[i]] ) {
+					config.narrationExt = config.narrationFormats[i];
+				}
+				i++;
+			}
+		}
+
 		if( config.rtl ) {
 			dom.wrapper.classList.add( 'rtl' );
 		}
@@ -1002,6 +1035,10 @@
 			dom.progress.addEventListener( 'click', onProgressClicked, false );
 		}
 
+		if( config.narrationAutoSlide && dom.narrationControls ) {
+			dom.narrationControls.addEventListener( 'ended', onNarrationEnded, false );
+		}
+
 		if( config.focusBodyOnPageVisibilityChange ) {
 			var visibilityChange;
 
@@ -1072,6 +1109,10 @@
 
 		if ( config.progress && dom.progress ) {
 			dom.progress.removeEventListener( 'click', onProgressClicked, false );
+		}
+
+		if( config.narrationAutoSlide && dom.narrationControls ) {
+			dom.narrationControls.removeEventListener( 'ended', onNarrationEnded, false );
 		}
 
 		[ 'touchstart', 'click' ].forEach( function( eventName ) {
@@ -2209,6 +2250,9 @@
 		// Announce the current slide contents, for screen readers
 		dom.statusDiv.textContent = currentSlide.textContent;
 
+		// Update narration audio for slide
+		updateNarrationContent( currentSlide );
+
 		updateControls();
 		updateProgress();
 		updateBackground();
@@ -3104,6 +3148,28 @@
 	}
 
 	/**
+	 * Updates narration audio content if narration is active.
+	 */
+	function updateNarrationContent( obj ) {
+
+		if( obj && config.narration ) {
+			// Pause narration audio element in case it is playing
+			dom.narrationControls.pause();
+
+			// Update narration control source
+			if( obj.hasAttribute( 'data-narration-file' )) {
+				dom.narrationControls.src = obj.getAttribute( 'data-narration-file' ) + '.' + config.narrationExt;
+				dom.narrationControls.load();
+				if( config.narrationAutoSlide ) { dom.narrationControls.play(); }
+			} else {
+				// Element does not have narration - replace with null file
+				dom.narrationControls.src = null;
+			}
+		}
+
+	}
+
+	/**
 	 * Returns the number of past slides. This can be used as a global
 	 * flattened index for slides.
 	 */
@@ -3596,6 +3662,9 @@
 
 				updateControls();
 				updateProgress();
+
+				// Update narration audio for fragment
+				updateNarrationContent( currentSlide.querySelector( '.current-fragment' ) );
 
 				return !!( fragmentsShown.length || fragmentsHidden.length );
 
@@ -4221,6 +4290,15 @@
 		}
 
 		slide( slideIndex );
+
+	}
+
+	/**
+	 * Event handler to advance slide/fragment after end of narration audio file
+	 */
+	function onNarrationEnded( event ) {
+
+		Reveal.next();
 
 	}
 
